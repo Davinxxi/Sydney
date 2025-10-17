@@ -1,0 +1,181 @@
+train:
+
+  noise_dir: ./MS-SNSD/
+  metadata_dir: ./SSL_src/metadata/
+
+  speech_dir: ./LibriSpeech/train-clean-100/
+  vad_dir: ./SSL_src/prepared/vad/train-clean-100/
+  
+  speech_csv: train_librispeech.csv
+  noise_csv: train_noise.csv
+
+  
+  num_spk: 1  # for real DataLoader
+  ans_azi: 0
+  degree_resolution: 1
+
+  dataloader_dict:
+    batch_size: 
+    shuffle: True
+    num_workers: 
+    drop_last: False
+
+  mic_type: tetra 
+  mic_num: 4 
+  max_n_mic: 4 
+  max_spk: 3
+  speech_least_chunk_size: 32000
+  duration: 64000 # 4s
+
+  SNR: [-10, 30]      # coherent noise
+  spk_SNR: [-5, 5]  # multi-speaker
+  white_noise_snr: [-10, 30]
+  normalize_factor: [0.004, 1.0]  # white noise
+
+  teacher_snr: 30
+  teacher_rt60: 0.2
+ 
+
+  gpu_rir_characteristic: 
+      
+    rt60_bound: [0.2, 1.3]
+    abs_weights_bound: [0.5, 1.0]
+    room_sz_bound: [[3.0, 3.0, 2.5], [10.0, 8.0, 6.0]]
+      
+    azi_gap: 30
+
+    mic:
+      rotation: True
+      mic_type: tetra
+      mic_height: [0.3, 1.2]
+      mic_from_wall: 0.2
+
+    ref_vec: 0
+    room:
+      distance: [0.3, 2.5] # m
+      azimuth: [0, 360, 1] # start, end, unit # degree
+      elevation: [30, 100, 1]  
+      
+
+    gpu_rir_generate_dict: # input of gpu rir
+      room_sz:
+      beta:
+      pos_src:
+      pos_rcv:
+      nb_img:
+      Tmax:
+      fs: 16000.0
+      c: 343.0
+      orV_rcv:
+      mic_pattern: omni 
+
+
+# synth
+val:
+  loader:
+
+    pkl_dir: 
+
+    num_spk: 1  # for real DataLoader
+    ans_azi: 0                                        
+    degree_resolution: 1                              
+
+    dataloader_dict:        # essential for real DataLoader
+      batch_size: 
+      shuffle: True
+      num_workers: 
+      drop_last: False
+
+    mic_type: tetra 
+    mic_num: 4 
+    max_n_mic: 4            # in usage
+
+  maker:
+
+    pkl_dir: 
+    
+    noise_dir: ./MS-SNSD/noise_test/
+    metadata_dir: ./SSL_src/metadata/
+
+    speech_dir: ./LibriSpeech/test-clean/
+    vad_dir: ./SSL_src/prepared/vad/test-clean/
+    
+    speech_csv: test_librispeech.csv
+    noise_csv: val_noise.csv
+    
+    
+    num_spk: 1  # for real DataLoader
+    ans_azi: 0
+    degree_resolution: 1
+
+    dataloader_dict:
+      batch_size: 1 
+      shuffle: True
+      num_workers: 1
+      drop_last: True
+
+    mic_type: tetra 
+    mic_num: 4 
+    max_n_mic: 4 
+    max_spk: 3
+    speech_least_chunk_size: 32000
+    duration: 64000 # 4s
+
+    SNR: [-10, 30]      # coherent noise
+    spk_SNR: [-5, 5]  # multi-speaker
+    white_noise_snr: [-10, 30]
+    normalize_factor: [0.004, 1.0]  # white noise
+  
+
+    gpu_rir_characteristic: 
+        
+      rt60_bound: [0.2, 1.3]
+      abs_weights_bound: [0.5, 1.0]
+      room_sz_bound: [[3.0, 3.0, 2.5], [10.0, 8.0, 6.0]]
+        
+      azi_gap: 30
+
+      mic:
+        rotation: True
+        mic_type: tetra
+        mic_height: [0.3, 1.2]
+        mic_from_wall: 0.2
+
+      ref_vec: 0
+      room:
+        distance: [0.3, 2.5] # m
+        azimuth: [0, 360, 1] # start, end, unit # degree
+        elevation: [30, 100, 1]  
+        
+
+      gpu_rir_generate_dict: # input of gpu rir
+        room_sz:
+        beta:
+        pos_src:
+        pos_rcv:
+        nb_img:
+        Tmax:
+        fs: 16000.0
+        c: 343.0
+        orV_rcv:
+        mic_pattern: omni 
+  
+  
+test:
+  loader:
+    pkl_dir: ./SSL_src/prepared/pkl/doa/ 
+  
+
+    ans_azi: 0
+    degree_resolution: 1
+    num_spk: 1
+
+    dataloader_dict:
+      batch_size: 1
+      shuffle: False
+      num_workers: 1
+      drop_last: True
+
+    mic_type: tetra 
+    mic_num: 4 
+    max_n_mic: 4

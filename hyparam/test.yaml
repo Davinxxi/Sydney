@@ -1,0 +1,27 @@
+torch_start_method: 'spawn'
+randomseed: 0
+
+
+resolution: 1
+acc_threshold: 20
+local_maximum_distance: 20
+
+SCL: True
+finetune: True
+
+#시각화용
+trained_scl_model_path: ./results/0830_Weighted_400epoch_DOA/model_checkpoint/best_model.tar
+
+#test용
+model_for_finetune: ./results/0903_ConstantMargin_DOA/model_checkpoint/best_acc_model.tar
+
+
+result_folder: 
+  room_type: ['evaluation']
+
+  inference_folder: './results/results/0903_ConstantMargin_DOA/synth20/'
+
+
+
+GPGPU:
+  device_ids: [0]

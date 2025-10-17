@@ -1,0 +1,68 @@
+from .base_loader.data_maker import train_data_maker_for_scl, speech_data_maker_for_scl, train_data_maker_for_doa, speech_data_maker_for_doa
+from .base_loader.data_loader import synth_data_loader, real_data_loader
+
+from torch.utils.data import DataLoader 
+import numpy as np
+import random
+import torch
+
+
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed) 
+    
+    
+    
+# data loaders
+def Train_dataload_for_scl(args, init_seed):
+    g = torch.Generator()    
+    g.manual_seed(init_seed)
+    return DataLoader(train_data_maker_for_scl(args),
+                                            # pin_memory=True,
+                                            # pin_memory_device=torch.device('cuda:0'),
+                                            worker_init_fn=seed_worker,
+                                            generator=g,
+                                            persistent_workers=True,
+                                            **args['dataloader_dict']
+                                            )
+    
+def Train_dataload_for_doa(args, init_seed):
+    g = torch.Generator()    
+    g.manual_seed(init_seed)
+    return DataLoader(train_data_maker_for_doa(args),
+                                            pin_memory=True,
+                                            worker_init_fn=seed_worker,
+                                            generator=g,
+                                            persistent_workers=True,
+                                            **args['dataloader_dict']
+                                            )
+    
+def Synth_dataload(args):
+    return DataLoader(synth_data_loader(args),
+                                            # pin_memory=True,
+                                            # pin_memory_device=torch.device('cuda:0'),
+                                            persistent_workers=True,
+                                            **args['dataloader_dict']
+                                            )
+def Real_dataload(args):
+    return DataLoader(real_data_loader(args),
+                                            pin_memory=True,
+                                            **args['dataloader_dict']
+                                            )
+
+
+
+# data makers
+def Speech_datamake_for_scl(args):
+    return DataLoader(speech_data_maker_for_scl(args),
+                                            pin_memory=True,
+                                            **args['dataloader_dict']
+                                            )
+    
+def Speech_datamake_for_doa(args):
+    return DataLoader(speech_data_maker_for_doa(args),
+                                            pin_memory=True,
+                                            **args['dataloader_dict']
+                                            )
+

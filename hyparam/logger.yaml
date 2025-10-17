@@ -1,0 +1,24 @@
+wandb:
+  wandb_ok: True
+  init:
+    project: calc_similarity
+    entity: 
+    name: 0911_NegConstMargin_minus_DOA
+    config:
+      sigma:
+      snr:
+      with_coherent_noise:
+      coherent_noise_snr:
+      num_speaker:
+    
+optimize_method: 'min'
+
+#loss_csv: ./results/logger/loss_log.csv
+# mae_csv: ./results/logger/mae_log.csv
+# acc_csv: ./results/logger/acc_log.csv
+
+loss_png_dir: ./results/logger/loss.png
+mae_png_dir: ./results/logger/mae.png
+acc_png_dir: ./results/logger/acc.png
+
+model_save_dir: ./results/model_checkpoint/

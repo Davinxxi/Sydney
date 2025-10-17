@@ -1,0 +1,552 @@
+from .datamake import datamake
+from ..random_gpu_rir_generator import gpu_rir_gen
+import os
+import pandas as pd
+import soundfile as sf
+import numpy as np
+import random
+import torch
+import pickle
+
+
+        
+class base_data_maker(datamake):
+    def __init__(self, args):
+
+        super(base_data_maker, self).__init__() 
+        
+        self.args=args
+        self.noise_dir= self.args['noise_dir']
+        self.speech_dir= self.args['speech_dir']
+        self.vad_dir=self.args['vad_dir']
+        self.metadata_dir=self.args['metadata_dir']
+        
+        self.noise_csv=pd.read_csv(self.metadata_dir+self.args['noise_csv'], index_col=0)
+        self.speech_csv=pd.read_csv(self.metadata_dir+self.args['speech_csv'], index_col=0) 
+        
+        # hyperparameter
+        self.duration=self.args['duration']
+        self.least_chunk_size=self.args['speech_least_chunk_size']
+        
+        # random
+        self.max_num_people=self.args['max_spk']
+        self.normalize_factor_bound=self.args['normalize_factor']        
+        self.white_noise_snr=self.args['white_noise_snr'] 
+        
+        self.rir_maker = gpu_rir_gen.acoustic_simulator_on_the_fly(self.args)
+        
+        #### only train on the fly maker
+        self.ans_azi=self.args['ans_azi']
+        self.degree_resolution=self.args['degree_resolution']
+    
+    # both
+    def noise_load(self):
+        
+        noise_info=self.noise_csv.sample(n=1)
+        noise_total_duration=noise_info['length'].iloc[0]
+        
+        noise_start_sample=0
+        if noise_total_duration>self.duration:
+            noise_start_sample=random.randrange(0, noise_total_duration-self.duration)
+            padding_size=0            
+            get_duration=self.duration
+        
+        else:
+            padding_size=self.duration-noise_total_duration
+            get_duration=-1
+        
+        
+        noise_path = str(noise_info['noise_directory'].iloc[0])
+        # only train
+        if noise_path.split('/')[0] == 'from_train_set':
+            noise_path = noise_path.replace('from_train_set', 'noise_train')
+        elif noise_path.split('/')[0] == 'from_test_set':
+            noise_path = noise_path.replace('from_test_set', 'noise_test')
+        
+        noise_wav, _ = sf.read(self.noise_dir + noise_path, dtype='float32', start=noise_start_sample, frames=get_duration)
+        
+        if padding_size>0:
+            front_padding=np.random.randint(0, padding_size)
+            noise_wav=np.pad(noise_wav, (front_padding, padding_size-front_padding))
+
+        noise_wav=np.expand_dims(noise_wav, 0)
+        noise_wav=self.remove_dc(noise_wav)
+       
+        return noise_wav
+
+    # both
+    def select_different_speakers(self, speech_info, num_spk):
+        temp_total_df=self.speech_csv
+        
+        for spk in range(num_spk-1): # selecting num_spk-1 more speakers, not overlapped
+            last_speaker=speech_info.iloc[-1]['speaker_id']
+            temp_total_df=temp_total_df.drop(temp_total_df[temp_total_df['speaker_id']==last_speaker].index)
+            temp_df=temp_total_df.sample(1)            
+            speech_info=pd.concat((speech_info, temp_df))
+      
+        return speech_info
+
+    # both
+    def speech_get_wav(self, wav_file, vad):
+
+        """
+        This is data maker. 'speech_wav' must be 1D array.
+        """
+        
+        speech_wav, fs = sf.read(wav_file, dtype='float32')
+        if speech_wav.ndim>1:
+            speech_wav=speech_wav[:,0]
+        
+        speech_total_duration=speech_wav.shape[0]
+        
+        ######## select postion
+        if speech_total_duration<self.least_chunk_size:
+            pos='mid'
+        elif speech_total_duration>self.duration:
+            pos=random.choice(['full', 'back', 'front'])
+        else:
+            pos=random.choice(['front', 'back', 'mid'])
+
+        ###### get chunk
+        speech_start_sample=0
+        if pos=='full':
+            speech_start_sample=random.randrange(0, speech_total_duration-self.duration)        
+            speech_wav=speech_wav[speech_start_sample:speech_start_sample+self.duration,]
+            vad=vad[speech_start_sample:speech_start_sample+self.duration,]
+            start_point=0
+
+        elif pos=='front': 
+            new_duration=random.randrange(self.least_chunk_size, self.duration+1)
+            speech_wav=speech_wav[speech_start_sample:speech_start_sample+new_duration,]
+            vad=vad[speech_start_sample:speech_start_sample+new_duration,]
+            start_point=0
+
+        elif pos=='back':
+            new_duration=random.randrange(self.least_chunk_size, self.duration+1)
+           
+            speech_wav=speech_wav[-new_duration:,]
+            vad=vad[-new_duration:,]
+            start_point=self.duration-new_duration
+   
+        elif pos=='mid':
+    
+            start_point=random.randint(0, self.duration-speech_total_duration)
+
+        speech_wav=self.remove_dc(speech_wav)
+        
+        return speech_wav, pos, start_point, vad, fs
+
+    # both
+    def get_speech_start_point(self, speech_wav, rir_peak, pos, vad, ):
+        
+        vad_len=vad.shape[-1]
+        rired_len=speech_wav.shape[-1]
+        if pos=='full':
+            start_point=0
+            speech_wav=speech_wav[:, rir_peak:rir_peak+self.duration]
+
+        elif pos=='mid':
+            
+            if rired_len>self.duration:
+                speech_wav=speech_wav[:, rir_peak:self.duration+rir_peak]
+            rired_len=speech_wav.shape[-1]
+            start_point=random.randint(0, self.duration-rired_len)
+
+        
+            vad=np.pad(vad, ( 0, rired_len-vad_len))
+            
+        elif pos=='front':
+            back_cut=rired_len-vad_len-rir_peak
+            speech_wav=speech_wav[:, :-back_cut]
+            rired_len=speech_wav.shape[-1]
+
+            if rired_len>self.duration:
+                start_point=0
+                speech_wav=speech_wav[:, -self.duration]
+                vad=np.pad(vad, ( self.duration-vad_len, 0))
+
+            else:
+                start_point=self.duration-rired_len
+                vad=np.pad(vad, ( rir_peak, 0))
+
+        elif pos=='back':
+            front_cut=rir_peak
+            speech_wav=speech_wav[:, front_cut:]
+            rired_len=speech_wav.shape[-1]
+
+            if rired_len>self.duration:
+                start_point=0
+                speech_wav=speech_wav[:, :self.duration]
+                vad=np.pad(vad, (0, self.duration-vad_len))
+            else:
+                start_point=0
+                vad=np.pad(vad, ( 0, rired_len-vad_len))
+
+
+        return start_point, speech_wav, vad
+    
+
+    def spk_mixer(self, rired_speech_list):
+        ref_wav=rired_speech_list[0]
+        
+        for spk_num in range(len(rired_speech_list[0:])):
+            spk_snr=random.uniform(*self.args['spk_SNR'])
+            other_spk=self.snr_mix(ref_wav, rired_speech_list[spk_num], spk_snr)
+            rired_speech_list[spk_num]=other_spk
+     
+        return rired_speech_list
+    
+
+    def main_speech_load(self, speech_info):
+        
+        wav_path = self.speech_dir + speech_info['audio_path']
+
+        ftype = '.' + speech_info['audio_path'].split('.')[-1]
+        vad_name = self.vad_dir + speech_info['audio_path'].replace(ftype, '.npy')
+
+        vad=np.load(vad_name)
+
+        
+        speech_wav, pos, start_point, vad, fs = self.speech_get_wav(wav_path, vad)
+
+        
+        return speech_wav, pos, start_point, vad, fs
+        
+        
+    
+    
+    def random_room_speech_select(self, n_room):
+            
+        speech_info = self.speech_csv.sample(n=n_room)
+            
+        self.rooms = []
+        for n in range(n_room):
+            room_sz, rt60, abs_weight = self.rir_maker.random_room_select()
+            self.rooms.append({'room_sz': room_sz, 'rt60': rt60, 'abs_weight': abs_weight, 'speech_info': speech_info.iloc[n:n+1]})
+
+
+    def __len__(self):
+        return len(self.speech_csv)
+    
+
+    def multi_speaker_rir_convolve(self, speech_info, speech_rirs, azimuth_deg):
+
+        rired_speech_list=[]
+        vad_list=[]
+        speech_start_point_list=[]
+
+        for spk_num, spk_info in enumerate(speech_info.iterrows()):
+            
+            spk_info = spk_info[1]          
+            speech_wav, pos, speech_start_point, vad_out, fs = self.main_speech_load(spk_info)
+            if azimuth_deg == 360:
+                speech_wav = np.zeros_like(speech_wav)
+            
+
+            speech_rir = speech_rirs[spk_num]       
+            self.speech_rir_peak = self.rir_peak_find(speech_rir)
+            
+
+            if speech_wav.ndim == 1:
+                speech_wav = np.expand_dims(speech_wav, 0)
+            
+            # RIR convolution
+            rired_speech = self.gpu_convolve(speech_wav, speech_rir)
+            
+            start_point, rired_speech, vad_out=self.get_speech_start_point(rired_speech, self.speech_rir_peak, pos, vad_out, )
+
+            rired_speech_list.append(rired_speech)
+            vad_list.append(vad_out)
+            speech_start_point_list.append(start_point)
+
+        
+        return rired_speech_list, vad_list, speech_start_point_list
+    
+
+    def speech_process(self, speech_rirs, num_spk, idx=None, room_info=None, azimuth_deg=None):
+
+        if idx is None:     # scl
+            speech_info = room_info['speech_info']
+        else:               # doa
+            speech_info = self.select_different_speakers(self.speech_csv.iloc[idx:idx+1], num_spk)  
+
+        rired_speech_list, vad_list, speech_start_point_list = self.multi_speaker_rir_convolve(speech_info, speech_rirs, azimuth_deg)
+        rired_speech_list = self.spk_mixer(rired_speech_list)
+
+        return rired_speech_list, vad_list, speech_start_point_list
+
+
+    def noise_process(self, noise_rir, rired_speech_list, speech_start_point_list, with_coherent_noise=False, teacher=False):
+        coherent_noise_snr=None
+        rired_noise_wav=None
+        
+        if with_coherent_noise:
+            self.noise_rir_peak=self.rir_peak_find(noise_rir)
+            noise_wav=self.noise_load()
+            
+            rired_noise_wav=self.gpu_convolve(noise_wav, noise_rir)[:,self.noise_rir_peak:self.duration+self.noise_rir_peak]
+            coherent_noise_snr=np.random.uniform(*self.args['SNR'])
+            
+        
+        white_noise_snr, normalize_factor=self.get_random_snr(self.white_noise_snr, self.normalize_factor_bound)
+        if teacher:
+            white_noise_snr = self.args['teacher_snr']
+
+        mixed=self.make_noisy(self.duration, rired_speech_list, white_noise_snr, normalize_factor, 
+                            speech_start_point_list, with_coherent_noise, coherent_noise_snr, rired_noise_wav)
+        mixed=self.clipping(mixed)
+
+        return mixed, white_noise_snr, coherent_noise_snr
+
+
+    def make_data(self, idx=None, room_info=None, azimuth_deg=None, with_coherent_noise=False, teacher=False):
+        
+        if idx is None and room_info is None:
+            raise ValueError('idx or room_info must be given')
+        
+
+        num_spk=random.randint(1, self.max_num_people) 
+        
+        
+        # rir 2 set for student & teacher (rir_list)
+        rir_list, azi_list, ele_list, rt60 = self.rir_maker.create_rir(num_spk=num_spk, 
+                                                with_coherent_noise=with_coherent_noise, 
+                                                mic_type=self.args['mic_type'], 
+                                                mic_num=self.args['mic_num'],
+                                                room_info=room_info,
+                                                azimuth_deg=azimuth_deg,
+                                                teacher=teacher)
+        
+
+        mixed_list = []
+
+        for i, rirs in enumerate(rir_list):
+
+            speech_rirs = rirs[:num_spk]
+            noise_rir = rirs[-1]
+
+            azi_list = azi_list[:num_spk]
+            ele_list = ele_list[:num_spk]
+            for j in range(self.max_num_people-num_spk):
+                azi_list.append(0)
+                ele_list.append(0)
+        
+            rired_speech_list, vad_list, speech_start_point_list = self.speech_process(speech_rirs,
+                                                                    num_spk,
+                                                                    idx=idx, 
+                                                                    room_info=room_info, 
+                                                                    azimuth_deg=azimuth_deg)
+            
+            mixed, white_noise_snr, coherent_noise_snr = self.noise_process(noise_rir,
+                                                            rired_speech_list, 
+                                                            speech_start_point_list, 
+                                                            with_coherent_noise=with_coherent_noise, 
+                                                            teacher=bool(i))
+            
+            mixed_list.append(torch.from_numpy(mixed.astype('float32')))
+      
+
+
+        vad = self.get_vad(self.duration, vad_list, speech_start_point_list, self.max_num_people).astype('float32')
+        vad, azi_list=self.multi_ans(vad, azi_list, self.ans_azi, self.degree_resolution)
+        
+        
+        return mixed_list, vad, azi_list, torch.tensor(ele_list), white_noise_snr, coherent_noise_snr, rt60
+    
+
+    def arrange_data(self, idx, teacher=False):
+
+        azimuth_deg = idx
+        
+        mixed_s_list = []
+        mixed_t_list = []
+        vad_list = []
+        white_snr_list = []
+        coherent_snr_list = []
+        rt60_list = []
+        azi_list_list = []
+        ele_list_list = []
+
+
+        if len(self.rooms) == 0:
+            for i in range(8):
+                mixed_list, vad, azi_list, ele_list, white_snr, coherent_snr, rt60 = self.make_data(idx+i, 
+                                                                        with_coherent_noise=False, 
+                                                                        teacher=teacher)
+                mixed_list = mixed_list*2
+                mixed_list = mixed_list[:2]
+                mixed_s, mixed_t = mixed_list
+                
+                mixed_s_list.append(mixed_s)
+                mixed_t_list.append(mixed_t)
+                vad_list.append(vad)
+                azi_list_list.append(azi_list)
+                ele_list_list.append(ele_list)
+                white_snr_list.append(white_snr)
+                coherent_snr_list.append(0)
+                rt60_list.append(rt60)
+
+        elif len(self.rooms) == 1:
+            for i in range(8):
+                mixed_list, vad, azi_list, ele_list, white_snr, coherent_snr, rt60 = self.make_data(idx+i, 
+                                                                        room_info=self.rooms[0], 
+                                                                        azimuth_deg=azimuth_deg, 
+                                                                        with_coherent_noise=False,
+                                                                        teacher=teacher)
+                mixed_list = mixed_list*2
+                mixed_list = mixed_list[:2]
+                mixed_s, mixed_t = mixed_list
+                
+                mixed_s_list.append(mixed_s)
+                mixed_t_list.append(mixed_t)
+                vad_list.append(vad)
+                azi_list_list.append(azi_list)
+                ele_list_list.append(ele_list)
+                white_snr_list.append(white_snr)
+                coherent_snr_list.append(0)
+                rt60_list.append(rt60)
+
+        else:
+            for room_info in self.rooms:
+                mixed_list, vad, azi_list, ele_list, white_snr, coherent_snr, rt60 = self.make_data(idx=None, 
+                                                                        room_info=room_info, 
+                                                                        azimuth_deg=azimuth_deg, 
+                                                                        with_coherent_noise=False,
+                                                                        teacher=teacher)
+                
+                mixed_list = mixed_list*2
+                mixed_list = mixed_list[:2]
+                mixed_s, mixed_t = mixed_list
+                
+                mixed_s_list.append(mixed_s)
+                mixed_t_list.append(mixed_t)
+                vad_list.append(vad)
+                azi_list_list.append(azi_list)
+                ele_list_list.append(ele_list)
+                white_snr_list.append(white_snr)
+                coherent_snr_list.append(0)
+                rt60_list.append(rt60)
+        
+        mixed_s = torch.stack(mixed_s_list)
+        mixed_t = torch.stack(mixed_t_list)
+        vad = torch.stack(vad_list)
+        azi_list = torch.stack(azi_list_list)
+        ele_list = torch.stack(ele_list_list)
+        
+        
+        return [mixed_s, mixed_t], vad, azi_list, ele_list, white_snr_list, coherent_snr_list, rt60_list
+    
+    
+    def __getitem__(self, idx):
+        return self.make_data(idx=idx)
+    
+
+""" train """
+class train_data_maker_for_scl(base_data_maker):
+    def __init__(self, args):
+        super(train_data_maker_for_scl, self).__init__(args)
+
+        self.max_num_people = 1
+        
+    def __len__(self):
+        return 361
+        
+    def __getitem__(self, idx):
+        return self.arrange_data(idx,)
+    
+    
+class train_data_maker_for_doa(base_data_maker):
+    def __init__(self, args):
+        super(train_data_maker_for_doa, self).__init__(args)
+    
+    def __getitem__(self, idx):
+        return self.make_data(idx, with_coherent_noise=True)
+    
+    
+
+""" validation & test """
+class speech_data_maker_for_scl(base_data_maker):
+    def __init__(self, args):
+        super(speech_data_maker_for_scl, self).__init__(args)
+        
+        # print('speech_csv', self.args['speech_csv'])
+        # print('noise_csv', self.args['noise_csv'])
+        
+        self.pkl_dir = './SSL_src/prepared/pkl/scl/'
+        os.makedirs(self.pkl_dir, exist_ok=True)
+
+        self.max_num_people = 1
+        
+    
+    def __len__(self):
+        return 361
+        
+        
+    def save_data(self, idx):
+        mixed, vad, azi_list, ele_list, white_snr_list, coherent_snr_list, rt60_list = self.arrange_data(idx)
+        
+        save_dict={}
+        save_dict['mixed']=mixed    # tensor
+        save_dict['vad']=vad        # tensor
+        save_dict['azi']=azi_list   # tensor
+        save_dict['ele']=ele_list   # tensor
+        save_dict['white_snr']=white_snr_list  # list
+        save_dict['coherent_snr']=coherent_snr_list
+        save_dict['rt60']=rt60_list
+
+        
+        pkl_name = list(azi_list[0].numpy()) + white_snr_list
+        pkl_name = [str(int(i)) for i in pkl_name]
+        pkl_name = '_'.join(pkl_name) + '.pkl'
+        pkl_name = self.pkl_dir + pkl_name
+        
+        os.makedirs(self.pkl_dir, exist_ok=True)
+        output=open(pkl_name, 'wb')
+        pickle.dump(save_dict, output)
+        output.close()
+        
+        return 1, 2, 3, 4
+        
+        
+    def __getitem__(self, idx):
+        return self.save_data(idx)
+    
+    
+class speech_data_maker_for_doa(base_data_maker):
+    def __init__(self, args):
+        super(speech_data_maker_for_doa, self).__init__(args)
+        
+        # print('speech_csv', self.args['speech_csv'])
+        # print('noise_csv', self.args['noise_csv'])
+        
+        self.pkl_dir = './SSL_src/prepared/pkl/doa/'
+        os.makedirs(self.pkl_dir, exist_ok=True)
+        
+        
+    def save_data(self, idx):
+        mixed, vad, azi_list, ele_list, white_snr, coherent_snr, rt60 = self.make_data(idx, with_coherent_noise=True)
+        
+        save_dict={}
+        save_dict['mixed']=mixed    # tensor
+        save_dict['vad']=vad        # tensor
+        save_dict['azi']=azi_list   # tensor
+        save_dict['ele']=ele_list
+        save_dict['white_snr']=white_snr
+        save_dict['coherent_snr']=coherent_snr 
+        save_dict['rt60']=rt60
+        
+        
+        pkl_name = str(idx) + '.pkl'
+        pkl_name = self.pkl_dir + pkl_name
+        
+        os.makedirs(self.pkl_dir, exist_ok=True)
+        output=open(pkl_name, 'wb')
+        pickle.dump(save_dict, output)
+        output.close()
+        
+        return 1, 2, 3, 4
+        
+        
+    def __getitem__(self, idx):
+        return self.save_data(idx)
+
