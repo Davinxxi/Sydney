@@ -4,8 +4,8 @@ randomseed: 0
 acc_threshold: 20
 local_maximum_distance: 20
 
-last_epoch: 200
-resume_epoch: 18
+last_epoch: 400
+resume_epoch: 0
 
 GPGPU:
   device_ids: [0]
@@ -13,6 +13,6 @@ GPGPU:
 SCL: True
 trained_scl_model_path: ./results/0911_NegConstMargin_minus/model_checkpoint/last_model.tar
 
-finetune: True
+finetune: False
 # finetune : resume할 때는 True로!
 model_for_finetune: ./results/0911_NegConstMargin_minus_DOA/model_checkpoint/last_model.tar  # only for fine-tuning

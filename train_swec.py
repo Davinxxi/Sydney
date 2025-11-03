@@ -102,9 +102,10 @@ class Learner_config():
 
     def init_loss_func(self):
 
-        from loss.new_loss import NegArcCos_Loss, SupCon_Loss, Weighted_SupConLoss, NegWeightedArc_Loss, WeightedArc_Loss, NegConstantMargin_Loss
+        # from loss.new_loss import NegArcCos_Loss, SupCon_Loss, Weighted_SupConLoss, NegWeightedArc_Loss, WeightedArc_Loss, NegConstantMargin_Loss
+        from loss.scl_loss import Weighted_SupConLoss
 
-        self.loss_func=NegConstantMargin_Loss()
+        self.loss_func=Weighted_SupConLoss()
         self.loss_train_map_num=self.args['learner']['loss']['option']['train_map_num']     # [0, 1, 2]
         self.loss_weight=self.args['learner']['loss']['option']['each_layer_weight']
 
@@ -215,14 +216,14 @@ class Logger_config():
         self.csv=dict()
         self.csv['train_epoch_loss']=[]
         self.csv['train_best_loss']=[]
-        # self.csv['test_epoch_loss']=[]
-        # self.csv['test_best_loss']=[]
+        self.csv['test_epoch_loss']=[]
+        self.csv['test_best_loss']=[]
 
         self.exp_name=self.args['logger']['wandb']['init']['name']
         self.exp_log_dir="./results/{}/".format(self.exp_name)
-        # if os.path.exists(self.exp_log_dir):
-        #     print("Experiment directory already exists. Please change the experiment name.🔥🔥🔥")
-        #     sys.exit(1)
+        if os.path.exists(self.exp_log_dir):
+            print("Experiment directory already exists. Please change the experiment name.🔥🔥🔥")
+            sys.exit(1)
 
         self.model_save_dir=self.exp_log_dir + "/model_checkpoint/"
         self.log_png_dir= self.exp_log_dir + "/loss.png"
@@ -234,6 +235,12 @@ class Logger_config():
         else:
             self.best_test_loss=-math.inf
             self.best_train_loss=-math.inf
+
+
+        self.theta_csv=dict()
+        self.theta_csv['epoch_pos_theta']=[]
+        self.theta_csv['epoch_neg_theta']=[]
+
 
     def train_iter_log(self, loss):
         try:
@@ -254,7 +261,7 @@ class Logger_config():
 
         try:
             wandb.log({'train_epoch_loss':loss_mean})
-            wandb.log({'train_best_loss':self.best_train_loss})
+            # wandb.log({'train_best_loss':self.best_train_loss})
         except:
             None
 
@@ -262,12 +269,19 @@ class Logger_config():
 
 
 
-    def test_iter_log(self, loss):
+    def test_iter_log(self, loss, pos_theta=None, neg_theta=None):
         try:
             wandb.log({'test_iter_loss':loss})
         except:
             None
         self.epoch_test_loss.append(loss.cpu().detach().item())
+
+        if pos_theta is not None:
+            wandb.log({'test_iter_pos_theta': pos_theta})
+            self.epoch_pos_theta.append(pos_theta)
+        if neg_theta is not None:
+            wandb.log({'test_iter_neg_theta': neg_theta})
+            self.epoch_neg_theta.append(neg_theta)
 
 
     def test_epoch_log(self, optimizer_scheduler):
@@ -280,18 +294,28 @@ class Logger_config():
             self.best_test_loss = loss_mean 
         try:
             wandb.log({'test_epoch_loss':loss_mean})
-            wandb.log({'test_best_loss':self.best_test_loss})
+            # wandb.log({'test_best_loss':self.best_test_loss})
         except:
             None
         self.csv['test_best_loss'].append(self.best_test_loss)
 
         optimizer_scheduler.step(loss_mean)
+
+        mean_pos_theta = np.array(self.epoch_pos_theta).mean()
+        mean_neg_theta = np.array(self.epoch_neg_theta).mean()
+        wandb.log({'test_epoch_pos_theta': mean_pos_theta})
+        wandb.log({'test_epoch_neg_theta': mean_neg_theta})
+        self.theta_csv['epoch_pos_theta'].append(mean_pos_theta)
+        self.theta_csv['epoch_neg_theta'].append(mean_neg_theta)
+
         
 
     def epoch_init(self,):
         self.epoch_train_loss=[]
-        # self.epoch_test_loss=[]
-    
+        self.epoch_test_loss=[]
+
+        self.epoch_pos_theta=[]
+        self.epoch_neg_theta=[]
 
     def epoch_finish(self, epoch, model, optimizer):
     
@@ -312,7 +336,8 @@ class Logger_config():
         torch.save(checkpoint,  self.model_save_dir + "last_model.tar")
 
         
-        util.util.draw_result_pic(self.log_png_dir, epoch, self.csv['train_epoch_loss'],  self.csv['train_epoch_loss'], 'Loss')
+        util.util.draw_result_pic(self.log_png_dir, epoch, self.csv['train_epoch_loss'],  self.csv['test_epoch_loss'], 'Loss')
+        util.util.draw_result_pic(self.log_png_dir.replace('loss', 'theta'), epoch, self.theta_csv['epoch_pos_theta'],  self.theta_csv['epoch_neg_theta'], 'Theta')
 
 
     def wandb_config(self):
@@ -376,7 +401,7 @@ class Trainer():
             self.logger.epoch_init()
             
             self.train(epoch)
-            # self.validation(epoch)           
+            self.validation(epoch)           
             
             self.logger.epoch_finish(epoch, self.model, self.optimizer)
 
@@ -428,6 +453,8 @@ class Trainer():
         
         torch.cuda.empty_cache()
         
+        iter_pos_theta = []
+        iter_neg_theta = []
 
         with torch.no_grad(): #inference시에는 gradient 업데이트가 필요없기에 속도나 메모리측면 이득으로 꺼두기
             
@@ -449,25 +476,66 @@ class Trainer():
                 outputs, embedding, speech_azi, vad_block = self.model(mixed, vad, speech_azi)
                 
                 loss=self.learner.test_update(outputs, speech_azi, vad_block)
-                    
-                    
-                self.logger.test_iter_log(loss)
+
+                pos_mean_theta, neg_mean_theta = self.calculate_batch_similarity(vad_block, speech_azi, outputs[-1])
+
+                iter_pos_theta.append(pos_mean_theta)
+                iter_neg_theta.append(neg_mean_theta)
+        
+        
+                self.logger.test_iter_log(loss, pos_mean_theta, neg_mean_theta)
                 self.learner.memory_delete([mixed, vad, speech_azi, white_snr, coherent_snr, rt60, outputs, loss, embedding, vad_block])
                 gc.collect()
              
             self.logger.test_epoch_log(self.optimizer_scheduler)
-            
-            
-            
+
+
+    def calculate_batch_similarity(self, vad_block, labels, output):
+        B, num_spk, n = vad_block.shape
+
+        vad_block_flat = vad_block.reshape(-1)  # (B*n)
+        labels = labels.repeat_interleave(n, dim=0)  # (B*n, 1)
+        labels[vad_block_flat==0] = 360
+        labels[labels == 360] = 1000
+        
+        output = output.permute(0, 2, 1)  # (B, n, 128)
+        output = output.reshape(-1, output.shape[-1])  # (B*n, 128)
+        
+        labels = labels.contiguous().view(-1, 1)
+        mask = torch.eq(labels, labels.T).float()
+
+        # mask = 1 - mask
+        pos_mask = mask - torch.eye(mask.shape[0], device=mask.device)  # 자기 자신 제외
+        neg_mask = 1 - mask - torch.eye(mask.shape[0], device=mask.device)  # 자기 자신 제외
+
+        features = output
+        contrast_feature = features         # (B, 128)
+        anchor_feature = contrast_feature   # (B, 128)
+        
+        anchor_dot_contrast = torch.matmul(anchor_feature, contrast_feature.T)
+
+        theta = torch.arccos(torch.clamp(anchor_dot_contrast, -1.0, 1.0))  # rad
+        theta_deg = torch.rad2deg(theta)                   # deg
+        pos_theta_deg = theta_deg * pos_mask                     # mask 적용
+        neg_theta_deg = theta_deg * neg_mask
+        
+        pos_mean_theta = pos_theta_deg.sum() / (pos_mask.sum() + 1e-6)  # 평균 θ (deg)
+        pos_mean_theta = pos_mean_theta.cpu().item()
+
+        neg_mean_theta = neg_theta_deg.sum() / (neg_mask.sum() + 1e-6)  # 평균 θ (deg)
+        neg_mean_theta = neg_mean_theta.cpu().item()
+
+        return pos_mean_theta, neg_mean_theta
+
 
 if __name__=='__main__':
     args=sys.argv[1:]
     
     args = ['model ./SSL_src/models/Causal_CRN_SPL_target/model_scl.yaml', 
             'dataloader ./SSL_src/dataloader/data_loader.yaml', 
-            'hyparam ./SSL_src_DV/hyparam/train.yaml', 
-            'learner ./SSL_src_DV/hyparam/learner.yaml', 
-            'logger ./SSL_src_DV/hyparam/logger.yaml']
+            'hyparam ./SSL_src/hyparam/train.yaml', 
+            'learner ./SSL_src/hyparam/learner.yaml', 
+            'logger ./SSL_src/hyparam/logger.yaml']
     
     args=util.util.get_yaml_args(args)
     t=Trainer(args)

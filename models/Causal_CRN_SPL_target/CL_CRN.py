@@ -11,9 +11,12 @@ class Causal_Conv2D_Block(nn.Module):
     def __init__(self, *args, **kwargs):
         super(Causal_Conv2D_Block, self).__init__()
         
+        # args: in_channel, out_channel, kernel_size (6, 64, (3, 3))
         self.conv2d=nn.Conv2d(*args, **kwargs)
 
         self.norm=nn.BatchNorm2d(args[1])
+        # self.norm=nn.LayerNorm(args[1])
+        # self.norm=nn.GroupNorm(num_groups=1, num_channels=args[1])
 
         self.activation=nn.ELU()
         
@@ -22,7 +25,9 @@ class Causal_Conv2D_Block(nn.Module):
         original_frame_num=x.shape[-1]           
         
         x=self.conv2d(x)
+        # x = x.permute(0, 2, 3, 1)
         x=self.norm(x)
+        # x = x.permute(0, 3, 1, 2)
         x=self.activation(x)   
         
         x=x[...,:original_frame_num] 
@@ -36,14 +41,18 @@ class Conv1D_Block(nn.Module):
         self.conv1d=nn.Conv1d(*args, **kwargs)
         
         self.norm=nn.BatchNorm1d(args[1])
-        
+        # self.norm=nn.LayerNorm(args[1])
+        # self.norm=nn.GroupNorm(num_groups=1, num_channels=args[1])
+
         self.activation=nn.ELU()
 
 
     def forward(self, x):
         
         x=self.conv1d(x)
+        # x = x.permute(0, 2, 1)
         x=self.norm(x)
+        # x = x.permute(0, 2, 1)
         x=self.activation(x)       
 
         return x
@@ -127,7 +136,7 @@ class crn(nn.Module):
 
 
         b, c, f, t=x.shape              # (B, 64, 8, n)
-        x=x.view(b, -1, t)                  # (B, 512, n)
+        x=x.reshape(b, -1, t)                  # (B, 512, n)
         embedding = F.normalize(x, dim=1)   # (B, 512, n)
 
         ##############################

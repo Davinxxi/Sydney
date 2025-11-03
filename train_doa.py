@@ -181,9 +181,9 @@ class Logger_config():
 
         self.exp_log_dir="./results/{}/".format(self.exp_name)
 
-        # if os.path.exists(self.exp_log_dir):
-        #     print("Experiment directory already exists. Please change the experiment name.🔥🔥🔥")
-        #     sys.exit(1)
+        if os.path.exists(self.exp_log_dir):
+            print("Experiment directory already exists. Please change the experiment name.🔥🔥🔥")
+            sys.exit(1)
 
 
         self.model_save_dir=self.exp_log_dir + "/model_checkpoint/"
@@ -378,12 +378,12 @@ class Dataloader_config():
         self.args['dataloader']['val']['loader']['pkl_dir'] = './SSL_src/prepared/pkl/doa/'
         
         self.train_loader=Train_dataload_for_doa(self.args['dataloader']['train'], self.args['hyparam']['randomseed'])
-        self.val_loader=Real_dataload(self.args['dataloader']['val']['loader'])
-        
-        return self.args   
-        
-        
-        
+        # self.val_loader=Real_dataload(self.args['dataloader']['val']['loader'])
+        self.val_loader=Synth_dataload(self.args['dataloader']['val']['loader'])
+
+        return self.args
+
+
 
 class Trainer():
 

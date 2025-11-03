@@ -72,10 +72,10 @@ class Trainer():
     
     def run(self, ):
         
-        for i in range(10):
-            self.validation_for_scl(0)
+        # for i in range(10):
+            # self.validation_for_scl(0)
         
-        # self.validation_for_doa(0)
+        self.validation_for_doa(0)
 
         
 
@@ -99,12 +99,12 @@ class Trainer():
 if __name__=='__main__':
     args=sys.argv[1:]
     
-    args = ['model /root/clssl/SSL_src/models/Causal_CRN_SPL_target/model_doa.yaml', 
-            'dataloader /root/clssl/SSL_src/dataloader/data_loader.yaml', 
-            'hyparam /root/clssl/SSL_src/hyparam/train.yaml', 
-            'learner /root/clssl/SSL_src/hyparam/learner.yaml', 
-            'logger /root/clssl/SSL_src/hyparam/logger.yaml']
-    
+    args = ['model SSL_src/models/Causal_CRN_SPL_target/model_doa.yaml', 
+            'dataloader SSL_src/dataloader/data_loader.yaml', 
+            'hyparam SSL_src/hyparam/train.yaml', 
+            'learner SSL_src/hyparam/learner.yaml', 
+            'logger SSL_src/hyparam/logger.yaml']
+
     args=util.util.get_yaml_args(args)
     t=Trainer(args)
     t.run()

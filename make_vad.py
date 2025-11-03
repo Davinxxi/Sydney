@@ -4,6 +4,7 @@ from tqdm import tqdm
 import soundfile as sf
 import numpy as np
 import os 
+import shutil
 
 
 def _cleanSilences(s, vad_tool, fs, aggressiveness, return_vad=False):
@@ -23,19 +24,19 @@ def _cleanSilences(s, vad_tool, fs, aggressiveness, return_vad=False):
 
 
 def make_speech_vad(vad_tool, wav_folder, vad_folder):
-    key_list = ['train-clean-100', 'test-clean']
+    key_list = ['train-clean-100', 'dev-clean', 'test-clean']
 
     for key in key_list:
 
         print(key)
 
         vad_dir=vad_folder[key]
-        data_dir=wav_folder[key]
+        wav_dir=wav_folder[key]
         print("vad dir", vad_dir)
-        print("data dir", data_dir)
+        print("data dir", wav_dir)
 
             
-        for audio_name in tqdm(pathlib.Path(data_dir).rglob('*.flac')):
+        for audio_name in tqdm(pathlib.Path(wav_dir).rglob('*.flac')):
             audio_name=str(audio_name)
             
             audio_file, fs= sf.read(audio_name)
@@ -50,24 +51,49 @@ def make_speech_vad(vad_tool, wav_folder, vad_folder):
             vad_out=vad_out.astype(bool)
 
             vad_name=audio_name.replace('.flac', '.npy')
-            vad_name=vad_name.replace(data_dir, vad_dir)
+            vad_name=vad_name.replace(wav_dir, vad_dir)
             os.makedirs(os.path.dirname(vad_name), exist_ok=True)
             
             np.save(vad_name, vad_out)    
+
         
+def move_speech_vad(vad_tool, wav_folder, vad_folder):
+    key_list = ['train-clean-100', 'dev-clean', 'test-clean']
+
+    for key in key_list:
+
+        print(key)
+
+        vad_dir=vad_folder[key]
+        wav_dir=wav_folder[key]
+        print("vad dir", vad_dir)
+        print("data dir", wav_dir)
+
             
+        for vad_name in tqdm(pathlib.Path(wav_dir).rglob('*.npy')):
+            vad_name=str(vad_name)
+
+            new_name=vad_name.replace(wav_dir, vad_dir)
+            os.makedirs(os.path.dirname(new_name), exist_ok=True)
+
+            shutil.move(vad_name, new_name)
+
+
 if __name__=='__main__':
     
     vad_tool=webrtcvad.Vad()
 
     wav_folder=dict()
-    wav_folder['train-clean-100'] = "/root/clssl/LibriSpeech/train-clean-100/"
-    wav_folder['test-clean'] = "/root/clssl/LibriSpeech/test-clean/"
+    wav_folder['train-clean-100'] = "LibriSpeech/train-clean-100/"
+    wav_folder['dev-clean'] = "LibriSpeech/dev-clean/"
+    wav_folder['test-clean'] = "LibriSpeech/test-clean/"
     
 
     vad_folder=dict()
-    vad_folder['train-clean-100'] = "/root/clssl/SSL_src/prepared/vad/train-clean-100/"
-    vad_folder['test-clean'] = "/root/clssl/SSL_src/prepared/vad/test-clean/"
-    
-    
+    vad_folder['train-clean-100'] = "SSL_src/prepared/vad/train-clean-100/"
+    vad_folder['dev-clean'] = "SSL_src/prepared/vad/dev-clean/"
+    vad_folder['test-clean'] = "SSL_src/prepared/vad/test-clean/"
+
+
     make_speech_vad(vad_tool, wav_folder, vad_folder)
+    # move_speech_vad(vad_tool, wav_folder, vad_folder)

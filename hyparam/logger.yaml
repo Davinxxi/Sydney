@@ -1,9 +1,9 @@
 wandb:
   wandb_ok: True
   init:
-    project: calc_similarity
+    project: the_last_project_CL
     entity: 
-    name: 0911_NegConstMargin_minus_DOA
+    name: 1101_039_SCL_swec_BN
     config:
       sigma:
       snr:

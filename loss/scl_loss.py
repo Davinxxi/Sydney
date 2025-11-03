@@ -29,6 +29,8 @@ class Weighted_SupConLoss(nn.Module):
             
     def generate_weight(self,):
         
+        distance=torch.arange(0, self.azi_size//2+1)            # (181)  0~180
+
         distance=torch.deg2rad(distance)                        # (181)
                           
         sigma=torch.deg2rad(self.sigma)
