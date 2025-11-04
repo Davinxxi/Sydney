@@ -417,8 +417,16 @@ class Trainer():
         self.model.train()
 
         torch.cuda.empty_cache()
-            
-        self.n_room = 1
+
+
+        if epoch < 100:
+            self.n_room = 1
+        elif epoch < 200:
+            self.n_room = 8
+        else:
+            self.n_room = 0
+
+
         self.dataloader.train_loader.dataset.random_room_speech_select(self.n_room)
         for iter_num, (mixed, vad, speech_azi, speech_ele, white_snr, coherent_snr, rt60
                        ) in enumerate(

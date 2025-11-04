@@ -170,9 +170,11 @@ class Learner_config():
         self.init_optimzer_scheduler()
         self.init_loss_func()
         return self.args
+    
 
 
-class Logger_config():
+
+class RD_Logger_config():
     def __init__(self, args) -> None:
         self.args=args
 
@@ -186,9 +188,197 @@ class Logger_config():
             sys.exit(1)
 
 
-        self.model_save_dir=self.exp_log_dir + "/model_checkpoint/"
-        self.log_png_dir= self.exp_log_dir + "/loss.png"
-        self.log_csv_dir= self.exp_log_dir + "/loss_log.csv"
+        self.model_save_dir=self.exp_log_dir + "/model_checkpoint_RD/"
+        self.log_png_dir= self.exp_log_dir + "/loss_RD.png"
+        self.log_csv_dir= self.exp_log_dir + "/loss_log_RD.csv"
+
+        if self.args['hyparam']['finetune']:
+
+            df = pd.read_csv(self.log_csv_dir)
+            df.drop(columns=['Unnamed: 0'], inplace=True)
+            self.log_csv = df.to_dict(orient='list')
+
+            self.best_train_loss = self.log_csv['train_best_loss'][-1]
+            self.best_test_acc = self.log_csv['test_best_acc'][-1]
+            self.best_test_mae = self.log_csv['test_best_mae'][-1]
+
+
+        else:
+            self.log_csv = {
+                'train_epoch_loss': [],
+                'train_best_loss': [],
+                'test_epoch_mae': [],
+                'test_best_mae': [],
+                'test_epoch_acc': [],
+                'test_best_acc': []
+            }
+
+            if self.args['logger']['optimize_method']=='min':
+                self.best_train_loss = math.inf
+                self.best_test_acc = -math.inf
+                self.best_test_mae = math.inf
+            else:
+                self.best_train_loss = -math.inf
+                self.best_test_acc = math.inf
+                self.best_test_mae = -math.inf
+
+
+###############################################
+# train log
+###############################################
+
+    def train_iter_loss_log(self, loss):
+        # try:
+        #     wandb.log({'train_iter_loss':loss})
+        # except:
+        #     None
+        self.epoch_train_loss.append(loss.cpu().detach().item())
+
+       
+    def train_epoch_loss_log(self):
+        loss_mean=np.array(self.epoch_train_loss).mean()
+
+        self.log_csv['train_epoch_loss'].append(loss_mean)
+
+        self.model_save_loss=False
+        if self.best_train_loss > loss_mean:
+            self.best_train_loss = loss_mean 
+            self.model_save_loss = True
+
+        # try:
+            # wandb.log({'train_epoch_loss':loss_mean})
+            # wandb.log({'train_best_loss':self.best_train_loss})
+        # except:
+            # None
+
+        self.log_csv['train_best_loss'].append(self.best_train_loss)
+
+
+###############################################
+# test log
+###############################################
+
+    def test_iter_metric_log(self, out, pseudo_target):
+        
+        total_argmax_acc, total_softmax_acc, total_half_softmax_acc, \
+                        total_argmax_doa_error, total_softmax_doa_error,total_half_softmax_doa_error, \
+                            number_of_degrees_to_estimate=metric.mae.calc_mae_RD(out, pseudo_target.long(),\
+                                                                        calc_layer=self.args['learner']['loss']['option']['train_map_num'],\
+                                                                            acc_threshold=self.args['hyparam']['acc_threshold'],\
+                                                                                local_maximum_distance=self.args['hyparam']['local_maximum_distance'])
+        now_dict=self.save_test_config_dict
+        
+        now_dict['softmax_acc']+=total_softmax_acc
+        now_dict['softmax_doa_error']+=total_softmax_doa_error
+        now_dict['number_of_degrees']+=number_of_degrees_to_estimate
+
+
+    def test_epoch_metric_log(self,):
+
+        now_dict=self.save_test_config_dict
+
+        softmax_acc = now_dict['softmax_acc'] / now_dict['number_of_degrees']
+        softmax_doa_error = now_dict['softmax_doa_error'] / now_dict['number_of_degrees']
+
+        softmax_acc = softmax_acc[1]
+        softmax_doa_error = softmax_doa_error[1]
+
+        self.log_csv['test_epoch_acc'].append(softmax_acc)
+        self.log_csv['test_epoch_mae'].append(softmax_doa_error)
+
+
+        self.model_save_acc = False
+        if self.best_test_acc < softmax_acc:
+            self.best_test_acc = softmax_acc
+            self.model_save_acc = True
+
+        self.model_save_mae = False
+        if self.best_test_mae > softmax_doa_error:
+            self.best_test_mae = softmax_doa_error
+            self.model_save_mae = True
+
+        try:
+            wandb.log({'RD_test_epoch_acc':softmax_acc})
+            # wandb.log({'test_best_acc':self.best_test_acc})
+            wandb.log({'RD_test_epoch_mae':softmax_doa_error})
+            # wandb.log({'test_best_mae':self.best_test_mae})
+        except:
+            None
+
+        self.log_csv['test_best_acc'].append(self.best_test_acc)
+        self.log_csv['test_best_mae'].append(self.best_test_mae)
+        
+
+
+###############################################
+# epoch init, finish
+###############################################
+
+    def epoch_init(self,):
+        self.epoch_train_loss=[]
+
+        self.save_test_config_dict={}
+        self.save_test_config_dict['softmax_acc']=0
+        self.save_test_config_dict['softmax_doa_error']=0
+        self.save_test_config_dict['number_of_degrees']=0
+
+    
+
+    def epoch_finish(self, epoch, model, optimizer):
+    
+        os.makedirs(os.path.dirname(self.log_csv_dir), exist_ok=True)
+        pd.DataFrame(self.log_csv).to_csv(self.log_csv_dir)
+
+        checkpoint = {
+                'epoch': epoch,
+                'model_state_dict': model.module.state_dict(),
+                'optimizer': optimizer.state_dict()
+            }
+
+
+        if self.model_save_mae:
+            os.makedirs(os.path.dirname(self.model_save_dir + "RD_best_mae_model.tar"), exist_ok=True)
+            torch.save(checkpoint, self.model_save_dir + "RD_best_mae_model.tar")
+            print("new best model - mae\n")
+
+        if self.model_save_acc:
+            os.makedirs(os.path.dirname(self.model_save_dir + "RD_best_acc_model.tar"), exist_ok=True)
+            torch.save(checkpoint, self.model_save_dir + "RD_best_acc_model.tar")
+            print("new best model - acc\n")
+
+
+        # torch.save(checkpoint,  self.model_save_dir + "last_model.tar".format(epoch))
+
+        util.util.draw_metric_pic(self.log_png_dir, epoch, self.log_csv['train_epoch_loss'],  self.log_csv['test_epoch_mae'], self.log_csv['test_epoch_acc'])
+
+
+    def wandb_config(self):
+        # if self.args['logger']['wandb']['wandb_ok']:
+        #     wandb.init(**self.args['logger']['wandb']['init'])      
+        return self.args  
+  
+    def config(self,):
+        self.wandb_config()
+        return self.args
+
+
+class SD_Logger_config():
+    def __init__(self, args) -> None:
+        self.args=args
+
+        self.exp_name=self.args['logger']['wandb']['init']['name']
+
+
+        self.exp_log_dir="./results/{}/".format(self.exp_name)
+
+        if os.path.exists(self.exp_log_dir):
+            print("Experiment directory already exists. Please change the experiment name.🔥🔥🔥")
+            sys.exit(1)
+
+
+        self.model_save_dir=self.exp_log_dir + "/model_checkpoint_SD/"
+        self.log_png_dir= self.exp_log_dir + "/loss_SD.png"
+        self.log_csv_dir= self.exp_log_dir + "/loss_log_SD.csv"
         
         if self.args['hyparam']['finetune']:
 
@@ -256,11 +446,19 @@ class Logger_config():
 # test log
 ###############################################
 
-    def test_iter_metric_log(self, out, pseudo_target):
+    def test_iter_loss_log(self, loss):
+        # try:
+        #     wandb.log({'SD_test_iter_loss':loss})
+        # except:
+        #     None
+        self.epoch_test_loss.append(loss.cpu().detach().item())
+
+
+    def test_iter_metric_log(self, out, target, vad_block, num_spk, speech_azi):
         
         total_argmax_acc, total_softmax_acc, total_half_softmax_acc, \
                         total_argmax_doa_error, total_softmax_doa_error,total_half_softmax_doa_error, \
-                            number_of_degrees_to_estimate=metric.mae.calc_mae_RD(out, pseudo_target.long(),\
+                            number_of_degrees_to_estimate=metric.mae.calc_mae(out, target, vad_block, num_spk, speech_azi,\
                                                                         calc_layer=self.args['learner']['loss']['option']['train_map_num'],\
                                                                             acc_threshold=self.args['hyparam']['acc_threshold'],\
                                                                                 local_maximum_distance=self.args['hyparam']['local_maximum_distance'])
@@ -269,6 +467,13 @@ class Logger_config():
         now_dict['softmax_acc']+=total_softmax_acc
         now_dict['softmax_doa_error']+=total_softmax_doa_error
         now_dict['number_of_degrees']+=number_of_degrees_to_estimate
+
+
+    def test_epoch_loss_log(self, optimizer_scheduler):
+        loss_mean=np.array(self.epoch_test_loss).mean()
+        # self.log_csv['test_epoch_loss'].append(loss_mean)
+
+        optimizer_scheduler.step(loss_mean)
 
 
     def test_epoch_metric_log(self,):
@@ -296,10 +501,10 @@ class Logger_config():
             self.model_save_mae = True
 
         try:
-            wandb.log({'test_epoch_acc':softmax_acc})
-            wandb.log({'test_best_acc':self.best_test_acc})
-            wandb.log({'test_epoch_mae':softmax_doa_error})
-            wandb.log({'test_best_mae':self.best_test_mae})
+            wandb.log({'SD_test_epoch_acc':softmax_acc})
+            # wandb.log({'test_best_acc':self.best_test_acc})
+            wandb.log({'SD_test_epoch_mae':softmax_doa_error})
+            # wandb.log({'test_best_mae':self.best_test_mae})
         except:
             None
 
@@ -307,13 +512,13 @@ class Logger_config():
         self.log_csv['test_best_mae'].append(self.best_test_mae)
         
 
-
 ###############################################
 # epoch init, finish
 ###############################################
 
     def epoch_init(self,):
         self.epoch_train_loss=[]
+        self.epoch_test_loss=[]
 
         self.save_test_config_dict={}
         self.save_test_config_dict['softmax_acc']=0
@@ -334,19 +539,19 @@ class Logger_config():
             }
 
 
-        if self.model_save_loss:
-            os.makedirs(os.path.dirname(self.model_save_dir + "best_loss_model.tar"), exist_ok=True)
-            torch.save(checkpoint, self.model_save_dir + "best_loss_model.tar")
-            print("new best model - loss\n")
+        # if self.model_save_loss:
+        #     os.makedirs(os.path.dirname(self.model_save_dir + "best_loss_model.tar"), exist_ok=True)
+        #     torch.save(checkpoint, self.model_save_dir + "best_loss_model.tar")
+        #     print("new best model - loss\n")
 
         if self.model_save_mae:
-            os.makedirs(os.path.dirname(self.model_save_dir + "best_mae_model.tar"), exist_ok=True)
-            torch.save(checkpoint, self.model_save_dir + "best_mae_model.tar")
+            os.makedirs(os.path.dirname(self.model_save_dir + "SD_best_mae_model.tar"), exist_ok=True)
+            torch.save(checkpoint, self.model_save_dir + "SD_best_mae_model.tar")
             print("new best model - mae\n")
 
         if self.model_save_acc:
-            os.makedirs(os.path.dirname(self.model_save_dir + "best_acc_model.tar"), exist_ok=True)
-            torch.save(checkpoint, self.model_save_dir + "best_acc_model.tar")
+            os.makedirs(os.path.dirname(self.model_save_dir + "SD_best_acc_model.tar"), exist_ok=True)
+            torch.save(checkpoint, self.model_save_dir + "SD_best_acc_model.tar")
             print("new best model - acc\n")
 
 
@@ -363,7 +568,7 @@ class Logger_config():
     def config(self,):
         self.wandb_config()
         return self.args
-        
+    
 
 class Dataloader_config():
     def __init__(self, args) -> None:
@@ -378,8 +583,8 @@ class Dataloader_config():
         self.args['dataloader']['val']['loader']['pkl_dir'] = './SSL_src/prepared/pkl/doa/'
         
         self.train_loader=Train_dataload_for_doa(self.args['dataloader']['train'], self.args['hyparam']['randomseed'])
-        # self.val_loader=Real_dataload(self.args['dataloader']['val']['loader'])
-        self.val_loader=Synth_dataload(self.args['dataloader']['val']['loader'])
+        self.RD_val_loader=Real_dataload(self.args['dataloader']['val']['loader'])
+        self.SD_val_loader=Synth_dataload(self.args['dataloader']['val']['loader'])
 
         return self.args
 
@@ -405,24 +610,33 @@ class Trainer():
         self.dataloader=Dataloader_config(self.args)
         self.args=self.dataloader.config()
 
-        self.logger=Logger_config(self.args)
-        self.args=self.logger.config()
+        self.RD_logger=RD_Logger_config(self.args)
+        self.args=self.RD_logger.config()
+
+        self.SD_logger=SD_Logger_config(self.args)
+        self.args=self.SD_logger.config()
 
     
     def run(self, ):
 
-        first_key = next(iter(self.logger.log_csv), None)
-        resume_epoch = len(self.logger.log_csv[first_key])
+        first_key = next(iter(self.SD_logger.log_csv), None)
+        resume_epoch = len(self.SD_logger.log_csv[first_key])
         print('resume epoch : {}'.format(resume_epoch))
 
         for epoch in range(resume_epoch, self.args['hyparam']['last_epoch']):
 
-            self.logger.epoch_init()
+            wandb.log({'epoch':epoch})
+
+            self.SD_logger.epoch_init()
+            self.RD_logger.epoch_init()
+
             
             self.train(epoch)
-            self.validation(epoch)           
+            self.validation_SD(epoch)
+            self.validation_RD(epoch)
             
-            self.logger.epoch_finish(epoch, self.model, self.optimizer)
+            self.SD_logger.epoch_finish(epoch, self.model, self.optimizer)
+            self.RD_logger.epoch_finish(epoch, self.model, self.optimizer)
 
             gc.collect()
             torch.cuda.empty_cache()
@@ -449,16 +663,57 @@ class Trainer():
             loss = self.learner.train_update(out, target)
                 
 
-            self.logger.train_iter_loss_log(loss)
+            self.SD_logger.train_iter_loss_log(loss)
+            self.RD_logger.train_iter_loss_log(loss)
 
             self.learner.memory_delete([mixed, vad, speech_azi, speech_ele, white_snr, coherent_snr, rt60, out, loss, target])
             gc.collect()
         
         
-        self.logger.train_epoch_loss_log()
+        self.SD_logger.train_epoch_loss_log()
+        self.RD_logger.train_epoch_loss_log()
+
+
+
+    def validation_SD(self, epoch):
+
+        self.model.eval()
+        torch.cuda.empty_cache()
+        
+        with torch.no_grad():
+            
+            for iter_num, (mixed, vad, speech_azi, white_snr, coherent_snr, rt60) in enumerate(tqdm(self.dataloader.SD_val_loader, desc='Test', total=len(self.dataloader.SD_val_loader), )):
+
+
+                mixed=mixed[0].to(self.hyperparameter.device)
+                vad=vad.to(self.hyperparameter.device)
+                speech_azi=speech_azi.to(self.hyperparameter.device)
+
+                out, target, vad_block = self.model(mixed, vad, speech_azi)    # (B, 3, 360, n), (B, num_spk, n)
+
+                out=out.sigmoid().detach().cpu()  
+                target=target.cpu()               
+                speech_azi=speech_azi.cpu()         # (B, 1)
+                vad_block=vad_block.cpu()           # (B, num_spk, n)
+                num_spk = vad_block.sum(axis=1).max()       # (1, )
+                num_spk = num_spk.item()
+
+                
+                loss=self.learner.test_update(out, target)
+                    
+                self.SD_logger.test_iter_loss_log(loss)
+                self.SD_logger.test_iter_metric_log(out, target, vad_block, num_spk, speech_azi)
+
+                self.learner.memory_delete([mixed, vad, target, out, loss, target, white_snr, coherent_snr, rt60])
+                gc.collect()
+            
+            
+            self.SD_logger.test_epoch_loss_log(self.optimizer_scheduler)
+            self.SD_logger.test_epoch_metric_log()
+
 
  
-    def validation(self, epoch):
+    def validation_RD(self, epoch):
 
         self.model.eval()
 
@@ -467,7 +722,7 @@ class Trainer():
         
         with torch.no_grad():
             
-            for iter_num, (mixed, vad, pseudo_target, white_snr, coherent_snr, rt60) in enumerate(tqdm(self.dataloader.val_loader, desc='Test', total=len(self.dataloader.val_loader), )):
+            for iter_num, (mixed, vad, pseudo_target, white_snr, coherent_snr, rt60) in enumerate(tqdm(self.dataloader.RD_val_loader, desc='Test', total=len(self.dataloader.RD_val_loader), )):
                 
                 
                 mixed=mixed.to(self.hyperparameter.device)
@@ -486,25 +741,26 @@ class Trainer():
                 loss=self.learner.test_update(out, pseudo_target)
                     
                     
-                self.logger.test_iter_metric_log(out, pseudo_target)
+                self.RD_logger.test_iter_metric_log(out, pseudo_target)
 
                 self.learner.memory_delete([mixed, vad, pseudo_target, out, loss, target, white_snr, coherent_snr, rt60])
                 gc.collect()
              
             
-            self.logger.test_epoch_metric_log()
-            
+            self.RD_logger.test_epoch_metric_log()
+
+           
 
 
 if __name__=='__main__':
     args=sys.argv[1:]
-    
-    args = ['model ./SSL_src_DV/models/Causal_CRN_SPL_target/model_doa.yaml', 
-            'model_scl ./SSL_src_DV/models/Causal_CRN_SPL_target/model_scl.yaml',
-            'dataloader ./SSL_src_DV/dataloader/data_loader.yaml', 
-            'hyparam ./SSL_src_DV/hyparam/train.yaml', 
-            'learner ./SSL_src_DV/hyparam/learner.yaml', 
-            'logger ./SSL_src_DV/hyparam/logger.yaml']
+
+    args = ['model ./SSL_src/models/Causal_CRN_SPL_target/model_doa.yaml',
+            'model_scl ./SSL_src/models/Causal_CRN_SPL_target/model_scl.yaml',
+            'dataloader ./SSL_src/dataloader/data_loader.yaml',
+            'hyparam ./SSL_src/hyparam/train.yaml',
+            'learner ./SSL_src/hyparam/learner.yaml',
+            'logger ./SSL_src/hyparam/logger.yaml']
     
     args=util.util.get_yaml_args(args)
     t=Trainer(args)

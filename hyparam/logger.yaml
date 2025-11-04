@@ -1,9 +1,9 @@
 wandb:
   wandb_ok: True
   init:
-    project: the_last_project_CL
+    project: the_last_project_DOA
     entity: 
-    name: 1101_039_SCL_swec_BN
+    name: 1104_039_SCL_swec_hard2easy_DOA
     config:
       sigma:
       snr:

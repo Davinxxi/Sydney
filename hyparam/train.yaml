@@ -4,14 +4,14 @@ randomseed: 0
 acc_threshold: 20
 local_maximum_distance: 20
 
-last_epoch: 400
+last_epoch: 150
 resume_epoch: 0
 
 GPGPU:
   device_ids: [0]
 
 SCL: True
-trained_scl_model_path: ./results/0911_NegConstMargin_minus/model_checkpoint/last_model.tar
+trained_scl_model_path: /root/mydir/results/1103_039_SCL_swec_hard2easy/model_checkpoint/last_model.tar
 
 finetune: False
 # finetune : resume할 때는 True로!
