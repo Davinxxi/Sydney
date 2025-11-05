@@ -179,18 +179,18 @@ class RD_Logger_config():
         self.args=args
 
         self.exp_name=self.args['logger']['wandb']['init']['name']
-
+        self.finetune=self.args['hyparam']['finetune']
 
         self.exp_log_dir="./results/{}/".format(self.exp_name)
 
-        if os.path.exists(self.exp_log_dir):
+        if os.path.exists(self.exp_log_dir) and not self.finetune:
             print("Experiment directory already exists. Please change the experiment name.🔥🔥🔥")
             sys.exit(1)
 
 
-        self.model_save_dir=self.exp_log_dir + "/model_checkpoint_RD/"
-        self.log_png_dir= self.exp_log_dir + "/loss_RD.png"
-        self.log_csv_dir= self.exp_log_dir + "/loss_log_RD.csv"
+        self.model_save_dir=self.exp_log_dir + "model_checkpoint_RD/"
+        self.log_png_dir= self.exp_log_dir + "loss_RD.png"
+        self.log_csv_dir= self.exp_log_dir + "loss_log_RD.csv"
 
         if self.args['hyparam']['finetune']:
 
@@ -367,11 +367,11 @@ class SD_Logger_config():
         self.args=args
 
         self.exp_name=self.args['logger']['wandb']['init']['name']
-
+        self.finetune=self.args['hyparam']['finetune']
 
         self.exp_log_dir="./results/{}/".format(self.exp_name)
 
-        if os.path.exists(self.exp_log_dir):
+        if os.path.exists(self.exp_log_dir) and not self.finetune:
             print("Experiment directory already exists. Please change the experiment name.🔥🔥🔥")
             sys.exit(1)
 

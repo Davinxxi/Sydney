@@ -4,12 +4,11 @@ wandb:
     project: the_last_project_DOA
     entity: 
     name: 1104_039_SCL_swec_hard2easy_DOA
-    config:
-      sigma:
-      snr:
-      with_coherent_noise:
-      coherent_noise_snr:
-      num_speaker:
+
+    # for fine-tuning
+    id: 6d9fqa23
+    resume : allow
+
     
 optimize_method: 'min'
 
