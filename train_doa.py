@@ -93,9 +93,9 @@ class Learner_config():
         self.gradient_clip=self.args['learner']['optimizer']['gradient_clip']
     
         
-    def init_optimzer_scheduler(self, ):
+    def init_optimizer_scheduler(self, ):
 
-        self.args['learner']['optimizer_scheduler']['config']['min_lr'] = 1.0e-3
+        self.args['learner']['optimizer_scheduler']['config']['min_lr'] = 1.0e-4
 
         a=importlib.import_module('torch.optim.lr_scheduler')
         assert hasattr(a, self.args['learner']['optimizer_scheduler']['type']), "optimizer scheduler {} is not in {}".format(self.args['learner']['optimizer']['type'], 'torch')
@@ -167,7 +167,7 @@ class Learner_config():
         self.device=self.args['hyparam']['GPGPU']['device']
         self.model_select()     # set self.model
         self.init_optimizer()
-        self.init_optimzer_scheduler()
+        self.init_optimizer_scheduler()
         self.init_loss_func()
         return self.args
     
@@ -339,12 +339,12 @@ class RD_Logger_config():
         if self.model_save_mae:
             os.makedirs(os.path.dirname(self.model_save_dir + "RD_best_mae_model.tar"), exist_ok=True)
             torch.save(checkpoint, self.model_save_dir + "RD_best_mae_model.tar")
-            print("new best model - mae\n")
+            print("RD new best model - mae\n")
 
         if self.model_save_acc:
             os.makedirs(os.path.dirname(self.model_save_dir + "RD_best_acc_model.tar"), exist_ok=True)
             torch.save(checkpoint, self.model_save_dir + "RD_best_acc_model.tar")
-            print("new best model - acc\n")
+            print("RD new best model - acc\n")
 
 
         # torch.save(checkpoint,  self.model_save_dir + "last_model.tar".format(epoch))
@@ -547,12 +547,12 @@ class SD_Logger_config():
         if self.model_save_mae:
             os.makedirs(os.path.dirname(self.model_save_dir + "SD_best_mae_model.tar"), exist_ok=True)
             torch.save(checkpoint, self.model_save_dir + "SD_best_mae_model.tar")
-            print("new best model - mae\n")
+            print("SD new best model - mae\n")
 
         if self.model_save_acc:
             os.makedirs(os.path.dirname(self.model_save_dir + "SD_best_acc_model.tar"), exist_ok=True)
             torch.save(checkpoint, self.model_save_dir + "SD_best_acc_model.tar")
-            print("new best model - acc\n")
+            print("SD new best model - acc\n")
 
 
         torch.save(checkpoint,  self.model_save_dir + "last_model.tar".format(epoch))

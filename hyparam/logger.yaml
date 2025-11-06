@@ -3,21 +3,12 @@ wandb:
   init:
     project: the_last_project_DOA
     entity: 
-    name: 1104_039_SCL_swec_hard2easy_DOA
+    name: 1105_039_SCL_swec_easy2hard_DOA
 
-    # for fine-tuning
-    id: 6d9fqa23
-    resume : allow
+    ### for fine-tuning
+    # id: 6d9fqa23
+    # resume : allow
 
     
 optimize_method: 'min'
 
-#loss_csv: ./results/logger/loss_log.csv
-# mae_csv: ./results/logger/mae_log.csv
-# acc_csv: ./results/logger/acc_log.csv
-
-loss_png_dir: ./results/logger/loss.png
-mae_png_dir: ./results/logger/mae.png
-acc_png_dir: ./results/logger/acc.png
-
-model_save_dir: ./results/model_checkpoint/
