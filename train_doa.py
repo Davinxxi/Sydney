@@ -28,6 +28,10 @@ class Hyparam_set():
         
 
     def randomseed_init(self,):
+
+        if self.args['hyparam']['finetune']:
+            self.args['hyparam']['randomseed'] = 1   
+
         np.random.seed(self.args['hyparam']['randomseed'])
         random.seed(self.args['hyparam']['randomseed'])
         torch.manual_seed(self.args['hyparam']['randomseed'])
@@ -83,7 +87,10 @@ class Learner_config():
 
     def init_optimizer(self):
 
-        self.args['learner']['optimizer']['config']['lr'] = 1.0e-3
+        if self.args['hyparam']['finetune']:
+            self.args['learner']['optimizer']['config']['lr'] = 1.0e-4
+        else:
+            self.args['learner']['optimizer']['config']['lr'] = 1.0e-3
         
         a=importlib.import_module('torch.optim')
         assert hasattr(a, self.args['learner']['optimizer']['type']), "optimizer {} is not in {}".format(self.args['learner']['optimizer']['type'], 'torch')

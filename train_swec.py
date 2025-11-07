@@ -328,11 +328,11 @@ class Logger_config():
                 'optimizer': optimizer.state_dict()
             }
 
-        os.makedirs(os.path.dirname(self.model_save_dir + "best_model.tar"), exist_ok=True)
-        if self.model_save:
-            os.makedirs(os.path.dirname(self.model_save_dir + "best_model.tar"), exist_ok=True)
-            torch.save(checkpoint, self.model_save_dir + "best_model.tar")
-            print("new best model\n")
+        os.makedirs(os.path.dirname(self.model_save_dir + "last_model.tar"), exist_ok=True)
+        # if self.model_save:
+        #     os.makedirs(os.path.dirname(self.model_save_dir + "best_model.tar"), exist_ok=True)
+        #     torch.save(checkpoint, self.model_save_dir + "best_model.tar")
+        #     print("new best model\n")
         torch.save(checkpoint,  self.model_save_dir + "last_model.tar")
 
         

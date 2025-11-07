@@ -5,7 +5,6 @@ acc_threshold: 20
 local_maximum_distance: 20
 
 last_epoch: 200
-resume_epoch: 0
 
 GPGPU:
   device_ids: [0]
@@ -13,6 +12,5 @@ GPGPU:
 SCL: True
 trained_scl_model_path: results/1103_039_SCL_swec_easy2hard/model_checkpoint/last_model.tar
 
-finetune: False
-# finetune : resume할 때는 True로!
-model_for_finetune: results/1104_039_SCL_swec_hard2easy_DOA/model_checkpoint_SD/last_model.tar  # only for fine-tuning
+finetune: True
+model_for_finetune: results/1105_039_SCL_swec_easy2hard_DOA/model_checkpoint_SD/SD_best_mae_model.tar  # only for fine-tuning

@@ -6,8 +6,8 @@ wandb:
     name: 1105_039_SCL_swec_easy2hard_DOA
 
     ### for fine-tuning
-    # id: 6d9fqa23
-    # resume : allow
+    id: joyj455t
+    resume : allow
 
     
 optimize_method: 'min'
