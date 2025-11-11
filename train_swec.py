@@ -213,11 +213,11 @@ class Learner_config():
 class Logger_config():
     def __init__(self, args) -> None:
         self.args=args
-        self.csv=dict()
-        self.csv['train_epoch_loss']=[]
-        self.csv['train_best_loss']=[]
-        self.csv['test_epoch_loss']=[]
-        self.csv['test_best_loss']=[]
+        self.loss_csv=dict()
+        self.loss_csv['train_epoch_loss']=[]
+        self.loss_csv['train_best_loss']=[]
+        self.loss_csv['test_epoch_loss']=[]
+        self.loss_csv['test_best_loss']=[]
 
         self.exp_name=self.args['logger']['wandb']['init']['name']
         self.exp_log_dir="./results/{}/".format(self.exp_name)
@@ -225,9 +225,11 @@ class Logger_config():
             print("Experiment directory already exists. Please change the experiment name.🔥🔥🔥")
             sys.exit(1)
 
-        self.model_save_dir=self.exp_log_dir + "/model_checkpoint/"
-        self.log_png_dir= self.exp_log_dir + "/loss.png"
-        self.log_csv_dir= self.exp_log_dir + "/loss_log.csv"
+        self.model_save_dir=self.exp_log_dir + "model_checkpoint/"
+        self.log_png_dir= self.exp_log_dir + "loss.png"
+        self.log_csv_dir= self.exp_log_dir + "loss_log.csv"
+        self.theta_png_dir= self.exp_log_dir + "theta.png"
+        self.theta_csv_dir= self.exp_log_dir + "theta_log.csv"
 
         if self.args['logger']['optimize_method']=='min':
             self.best_test_loss=math.inf
@@ -253,7 +255,7 @@ class Logger_config():
     def train_epoch_log(self):
         loss_mean=np.array(self.epoch_train_loss).mean()
 
-        self.csv['train_epoch_loss'].append(loss_mean)
+        self.loss_csv['train_epoch_loss'].append(loss_mean)
 
         self.model_save=False
         if self.best_train_loss > loss_mean:
@@ -265,7 +267,7 @@ class Logger_config():
         except:
             None
 
-        self.csv['train_best_loss'].append(self.best_train_loss)
+        self.loss_csv['train_best_loss'].append(self.best_train_loss)
 
 
 
@@ -286,7 +288,7 @@ class Logger_config():
 
     def test_epoch_log(self, optimizer_scheduler):
         loss_mean=np.array(self.epoch_test_loss).mean()
-        self.csv['test_epoch_loss'].append(loss_mean)
+        self.loss_csv['test_epoch_loss'].append(loss_mean)
 
         self.model_save=False
         if self.best_test_loss > loss_mean:
@@ -297,14 +299,18 @@ class Logger_config():
             # wandb.log({'test_best_loss':self.best_test_loss})
         except:
             None
-        self.csv['test_best_loss'].append(self.best_test_loss)
+        self.loss_csv['test_best_loss'].append(self.best_test_loss)
 
         optimizer_scheduler.step(loss_mean)
 
+        # theta
         mean_pos_theta = np.array(self.epoch_pos_theta).mean()
         mean_neg_theta = np.array(self.epoch_neg_theta).mean()
-        wandb.log({'test_epoch_pos_theta': mean_pos_theta})
-        wandb.log({'test_epoch_neg_theta': mean_neg_theta})
+        try:
+            wandb.log({'test_epoch_pos_theta': mean_pos_theta})
+            wandb.log({'test_epoch_neg_theta': mean_neg_theta})
+        except:
+            None
         self.theta_csv['epoch_pos_theta'].append(mean_pos_theta)
         self.theta_csv['epoch_neg_theta'].append(mean_neg_theta)
 
@@ -320,7 +326,8 @@ class Logger_config():
     def epoch_finish(self, epoch, model, optimizer):
     
         os.makedirs(os.path.dirname(self.log_csv_dir), exist_ok=True)
-        pd.DataFrame(self.csv).to_csv(self.log_csv_dir)
+        pd.DataFrame(self.loss_csv).to_csv(self.log_csv_dir)
+        pd.DataFrame(self.theta_csv).to_csv(self.theta_csv_dir)
 
         checkpoint = {
                 'epoch': epoch,
@@ -336,8 +343,8 @@ class Logger_config():
         torch.save(checkpoint,  self.model_save_dir + "last_model.tar")
 
         
-        util.util.draw_result_pic(self.log_png_dir, epoch, self.csv['train_epoch_loss'],  self.csv['test_epoch_loss'], 'Loss')
-        util.util.draw_result_pic(self.log_png_dir.replace('loss', 'theta'), epoch, self.theta_csv['epoch_pos_theta'],  self.theta_csv['epoch_neg_theta'], 'Theta')
+        util.util.draw_result_pic(self.log_png_dir, epoch, self.loss_csv['train_epoch_loss'],  self.loss_csv['test_epoch_loss'], 'Loss')
+        util.util.draw_result_pic(self.theta_png_dir, epoch, self.theta_csv['epoch_pos_theta'],  self.theta_csv['epoch_neg_theta'], 'Theta')
 
 
     def wandb_config(self):
@@ -395,8 +402,12 @@ class Trainer():
 
     
     def run(self, ):
-      
-        for epoch in range(self.args['hyparam']['resume_epoch'], self.args['hyparam']['last_epoch']):
+
+        first_key = next(iter(self.logger.loss_csv), None)
+        resume_epoch = len(self.logger.loss_csv[first_key])
+        print('resume epoch : {}'.format(resume_epoch))
+
+        for epoch in range(resume_epoch, self.args['hyparam']['last_epoch']):
 
             self.logger.epoch_init()
             

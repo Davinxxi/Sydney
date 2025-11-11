@@ -3,11 +3,11 @@ wandb:
   init:
     project: the_last_project_DOA
     entity: 
-    name: 1105_039_SCL_swec_easy2hard_DOA
+    name: 1110_039_SCL_swec_BN_hard2easy_DOA
 
     ### for fine-tuning
-    id: joyj455t
-    resume : allow
+    # id: o2rb7zxz
+    # resume : allow
 
     
 optimize_method: 'min'
