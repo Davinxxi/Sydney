@@ -10,7 +10,7 @@ GPGPU:
   device_ids: [0]
 
 SCL: True
-trained_scl_model_path: results/1110_039_SCL_swec_BN_hard2easy/model_checkpoint/last_model.tar
+trained_scl_model_path: results/1112_000_SCL_GN_hard/model_checkpoint/last_model.tar
 
-finetune: False
-model_for_finetune: results/1110_039_SCL_swec_BN_hard2easy_DOA/model_checkpoint/last_model.tar  # only for fine-tuning
+finetune: True
+model_for_finetune: results/1112_000_SCL_GN_hard_DOA/model_checkpoint_SD/last_model.tar  # only for fine-tuning
