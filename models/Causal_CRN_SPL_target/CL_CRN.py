@@ -159,8 +159,6 @@ class crn(nn.Module):
             out = F.normalize(out, dim=1)  # (B, 128, n)
             outputs.append(out)
 
-            break      # for SCL, only one output is used
-        
         return outputs, embedding
 
 

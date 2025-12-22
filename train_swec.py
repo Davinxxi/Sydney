@@ -206,7 +206,7 @@ class Learner_config():
         self.init_optimizer()
         self.init_optimzer_scheduler()
         self.init_loss_func()
-        self.sigma = [0]
+        self.sigma = [0, 3, 9]
         return self.args
 
 
@@ -230,6 +230,8 @@ class Logger_config():
         self.log_csv_dir= self.exp_log_dir + "loss_log.csv"
         self.theta_png_dir= self.exp_log_dir + "theta.png"
         self.theta_csv_dir= self.exp_log_dir + "theta_log.csv"
+        self.grad_png_dir= self.exp_log_dir + "grad.png"
+        self.grad_csv_dir= self.exp_log_dir + "grad_log.csv"
 
         if self.args['logger']['optimize_method']=='min':
             self.best_test_loss=math.inf
@@ -242,6 +244,9 @@ class Logger_config():
         self.theta_csv=dict()
         self.theta_csv['epoch_pos_theta']=[]
         self.theta_csv['epoch_neg_theta']=[]
+
+        self.grad_csv=dict()
+        self.grad_csv['epoch_gradient']=[]
 
 
     def train_iter_log(self, loss):
@@ -271,7 +276,7 @@ class Logger_config():
 
 
 
-    def test_iter_log(self, loss, pos_theta=None, neg_theta=None):
+    def test_iter_log(self, loss, pos_theta=None, neg_theta=None, gradient=None):
         try:
             wandb.log({'test_iter_loss':loss})
         except:
@@ -284,9 +289,14 @@ class Logger_config():
         if neg_theta is not None:
             wandb.log({'test_iter_neg_theta': neg_theta})
             self.epoch_neg_theta.append(neg_theta)
+        if gradient is not None:
+            wandb.log({'test_iter_gradient': gradient})
+            self.epoch_gradient.append(gradient)
 
 
     def test_epoch_log(self, optimizer_scheduler):
+
+        ########## loss
         loss_mean=np.array(self.epoch_test_loss).mean()
         self.loss_csv['test_epoch_loss'].append(loss_mean)
 
@@ -303,7 +313,7 @@ class Logger_config():
 
         optimizer_scheduler.step(loss_mean)
 
-        # theta
+        ######### theta
         mean_pos_theta = np.array(self.epoch_pos_theta).mean()
         mean_neg_theta = np.array(self.epoch_neg_theta).mean()
         try:
@@ -314,6 +324,15 @@ class Logger_config():
         self.theta_csv['epoch_pos_theta'].append(mean_pos_theta)
         self.theta_csv['epoch_neg_theta'].append(mean_neg_theta)
 
+        ######### gradient
+        # mean_gradient = np.array(self.epoch_gradient).mean()
+        # try:
+        #     wandb.log({'test_epoch_gradient': mean_gradient})
+        # except:
+        #     None
+        # self.grad_csv['epoch_gradient'].append(mean_gradient)
+
+
         
 
     def epoch_init(self,):
@@ -323,11 +342,14 @@ class Logger_config():
         self.epoch_pos_theta=[]
         self.epoch_neg_theta=[]
 
+        self.epoch_gradient=[]
+
     def epoch_finish(self, epoch, model, optimizer):
     
         os.makedirs(os.path.dirname(self.log_csv_dir), exist_ok=True)
         pd.DataFrame(self.loss_csv).to_csv(self.log_csv_dir)
         pd.DataFrame(self.theta_csv).to_csv(self.theta_csv_dir)
+        # pd.DataFrame(self.grad_csv).to_csv(self.grad_csv_dir)
 
         checkpoint = {
                 'epoch': epoch,
@@ -336,15 +358,12 @@ class Logger_config():
             }
 
         os.makedirs(os.path.dirname(self.model_save_dir + "last_model.tar"), exist_ok=True)
-        # if self.model_save:
-        #     os.makedirs(os.path.dirname(self.model_save_dir + "best_model.tar"), exist_ok=True)
-        #     torch.save(checkpoint, self.model_save_dir + "best_model.tar")
-        #     print("new best model\n")
         torch.save(checkpoint,  self.model_save_dir + "last_model.tar")
 
         
         util.util.draw_result_pic(self.log_png_dir, epoch, self.loss_csv['train_epoch_loss'],  self.loss_csv['test_epoch_loss'], 'Loss')
         util.util.draw_result_pic(self.theta_png_dir, epoch, self.theta_csv['epoch_pos_theta'],  self.theta_csv['epoch_neg_theta'], 'Theta')
+        # util.util.draw_result_pic(self.grad_png_dir, epoch, self.grad_csv['epoch_gradient'], self.grad_csv['epoch_gradient'], 'Gradient')
 
 
     def wandb_config(self):
@@ -429,13 +448,24 @@ class Trainer():
 
         torch.cuda.empty_cache()
 
-
-        if epoch < 100:
+        if epoch < 200:
             self.n_room = 1
-        elif epoch < 200:
-            self.n_room = 8
         else:
             self.n_room = 0
+
+
+        # if epoch < 100:
+        #     self.n_room = 1
+        # elif epoch < 200:
+        #     self.n_room = 8
+        # else:
+        #     self.n_room = 0
+
+        # self.n_room = 1
+
+        # self.n_room = 64        # easy pos + easy neg
+        # self.n_room = 128       # easy pos + easy neg + hard pos
+        # self.n_room = 2         # easy pos + easy neg + hard pos + hard neg
 
 
         self.dataloader.train_loader.dataset.random_room_speech_select(self.n_room)
@@ -472,10 +502,10 @@ class Trainer():
         
         torch.cuda.empty_cache()
         
-        iter_pos_theta = []
-        iter_neg_theta = []
+        # iter_pos_theta = []
+        # iter_neg_theta = []
 
-        with torch.no_grad(): #inference시에는 gradient 업데이트가 필요없기에 속도나 메모리측면 이득으로 꺼두기
+        with torch.no_grad():
             
             # mixed : (16, 4, 64000)
             # speech_azi : (16, 1)
@@ -498,11 +528,11 @@ class Trainer():
 
                 pos_mean_theta, neg_mean_theta = self.calculate_batch_similarity(vad_block, speech_azi, outputs[-1])
 
-                iter_pos_theta.append(pos_mean_theta)
-                iter_neg_theta.append(neg_mean_theta)
+                # iter_pos_theta.append(pos_mean_theta)
+                # iter_neg_theta.append(neg_mean_theta)
         
         
-                self.logger.test_iter_log(loss, pos_mean_theta, neg_mean_theta)
+                self.logger.test_iter_log(loss, pos_mean_theta, neg_mean_theta) #, gradient)
                 self.learner.memory_delete([mixed, vad, speech_azi, white_snr, coherent_snr, rt60, outputs, loss, embedding, vad_block])
                 gc.collect()
              
@@ -544,7 +574,15 @@ class Trainer():
         neg_mean_theta = neg_theta_deg.sum() / (neg_mask.sum() + 1e-6)  # 평균 θ (deg)
         neg_mean_theta = neg_mean_theta.cpu().item()
 
-        return pos_mean_theta, neg_mean_theta
+
+        ###############################################
+        # Gradient
+        ###############################################
+
+        # gradient = neg_theta_deg.sum() / (neg_theta_deg.sum() + pos_theta_deg.sum())
+        # gradient = gradient.cpu().item()
+
+        return pos_mean_theta, neg_mean_theta #, gradient
 
 
 if __name__=='__main__':

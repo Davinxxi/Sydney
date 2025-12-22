@@ -265,7 +265,10 @@ class base_data_maker(datamake):
 
     def speech_process(self, speech_rirs, num_spk, idx=None, room_info=None, azimuth_deg=None):
 
-        if idx is None:     # scl
+        if idx is None and room_info is None:
+            speech_info = self.speech_csv.sample(n=1)
+            speech_info = self.select_different_speakers(speech_info.iloc[0], num_spk)
+        elif idx is None:     # scl
             speech_info = room_info['speech_info']
         else:               # doa
             speech_info = self.select_different_speakers(self.speech_csv.iloc[idx:idx+1], num_spk)  
@@ -301,8 +304,8 @@ class base_data_maker(datamake):
 
     def make_data(self, idx=None, room_info=None, azimuth_deg=None, with_coherent_noise=False, teacher=False):
         
-        if idx is None and room_info is None:
-            raise ValueError('idx or room_info must be given')
+        if idx is None and azimuth_deg is None:
+            raise ValueError('idx or azimuth_deg must be given')
         
 
         num_spk=random.randint(1, self.max_num_people) 
@@ -368,9 +371,10 @@ class base_data_maker(datamake):
         ele_list_list = []
 
 
-        if len(self.rooms) == 0:
+        if len(self.rooms) == 0:        # random room
             for i in range(8):
-                mixed_list, vad, azi_list, ele_list, white_snr, coherent_snr, rt60 = self.make_data(idx+i, 
+                mixed_list, vad, azi_list, ele_list, white_snr, coherent_snr, rt60 = self.make_data(idx=None, 
+                                                                        azimuth_deg=azimuth_deg,
                                                                         with_coherent_noise=False, 
                                                                         teacher=teacher)
                 mixed_list = mixed_list*2
@@ -386,9 +390,9 @@ class base_data_maker(datamake):
                 coherent_snr_list.append(0)
                 rt60_list.append(rt60)
 
-        elif len(self.rooms) == 1:
+        elif len(self.rooms) == 1:      # fixed 1 room
             for i in range(8):
-                mixed_list, vad, azi_list, ele_list, white_snr, coherent_snr, rt60 = self.make_data(idx+i, 
+                mixed_list, vad, azi_list, ele_list, white_snr, coherent_snr, rt60 = self.make_data(idx=None, 
                                                                         room_info=self.rooms[0], 
                                                                         azimuth_deg=azimuth_deg, 
                                                                         with_coherent_noise=False,
@@ -406,8 +410,8 @@ class base_data_maker(datamake):
                 coherent_snr_list.append(0)
                 rt60_list.append(rt60)
 
-        else:
-            for room_info in self.rooms:
+        elif len(self.rooms) == 8:
+            for room_info in self.rooms:        # fixed 8 rooms
                 mixed_list, vad, azi_list, ele_list, white_snr, coherent_snr, rt60 = self.make_data(idx=None, 
                                                                         room_info=room_info, 
                                                                         azimuth_deg=azimuth_deg, 
@@ -426,6 +430,14 @@ class base_data_maker(datamake):
                 white_snr_list.append(white_snr)
                 coherent_snr_list.append(0)
                 rt60_list.append(rt60)
+
+        elif len(self.rooms) == 64:
+            pass
+        elif len(self.rooms) == 128:
+            pass
+        elif len(self.rooms) == 2:
+            pass
+
         
         mixed_s = torch.stack(mixed_s_list)
         mixed_t = torch.stack(mixed_t_list)
