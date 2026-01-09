@@ -448,10 +448,10 @@ class Trainer():
 
         torch.cuda.empty_cache()
 
-        if epoch < 200:
-            self.n_room = 1
-        else:
-            self.n_room = 0
+        # if epoch < 200:
+        #     self.n_room = 1
+        # else:
+        #     self.n_room = 0
 
 
         # if epoch < 100:
@@ -461,7 +461,7 @@ class Trainer():
         # else:
         #     self.n_room = 0
 
-        # self.n_room = 1
+        self.n_room = 1
 
         # self.n_room = 64        # easy pos + easy neg
         # self.n_room = 128       # easy pos + easy neg + hard pos
