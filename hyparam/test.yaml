@@ -13,13 +13,13 @@ finetune: True
 trained_scl_model_path: ./results/0830_Weighted_400epoch_DOA/model_checkpoint/best_model.tar
 
 #test용
-model_for_finetune: ./results/0903_ConstantMargin_DOA/model_checkpoint/best_acc_model.tar
+model_for_finetune: ./results/1216_039_FlipSCL_BN_hard_DOA/model_checkpoint_RD/RD_best_acc_model.tar
 
 
 result_folder: 
   room_type: ['evaluation']
 
-  inference_folder: './results/results/0903_ConstantMargin_DOA/synth20/'
+  inference_folder: './results/1216_039_FlipSCL_BN_hard_DOA/tau/real20/'
 
 
 

@@ -14,9 +14,9 @@ class Causal_Conv2D_Block(nn.Module):
         # args: in_channel, out_channel, kernel_size (6, 64, (3, 3))
         self.conv2d=nn.Conv2d(*args, **kwargs)
 
-        # self.norm=nn.BatchNorm2d(args[1])
+        self.norm=nn.BatchNorm2d(args[1])
         # self.norm=nn.LayerNorm(args[1])
-        self.norm=nn.GroupNorm(num_groups=1, num_channels=args[1])
+        # self.norm=nn.GroupNorm(num_groups=1, num_channels=args[1])
 
         self.activation=nn.ELU()
         
@@ -40,9 +40,9 @@ class Conv1D_Block(nn.Module):
         
         self.conv1d=nn.Conv1d(*args, **kwargs)
         
-        # self.norm=nn.BatchNorm1d(args[1])
+        self.norm=nn.BatchNorm1d(args[1])
         # self.norm=nn.LayerNorm(args[1])
-        self.norm=nn.GroupNorm(num_groups=1, num_channels=args[1])
+        # self.norm=nn.GroupNorm(num_groups=1, num_channels=args[1])
 
         self.activation=nn.ELU()
 
@@ -158,8 +158,6 @@ class crn(nn.Module):
 
             out = F.normalize(out, dim=1)  # (B, 128, n)
             outputs.append(out)
-
-            break      # for SCL, only one output is used
         
         return outputs, embedding
 

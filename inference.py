@@ -321,10 +321,10 @@ if __name__=='__main__':
 
     args = ['model ./SSL_src/models/Causal_CRN_SPL_target/model_doa.yaml', 
             'model_scl ./SSL_src/models/Causal_CRN_SPL_target/model_scl.yaml',
-            'dataloader ./SSL_src_DV/dataloader/data_loader.yaml', 
-            'hyparam ./SSL_src_DV/hyparam/test.yaml', 
-            'learner ./SSL_src_DV/hyparam/learner.yaml', 
-            'logger ./SSL_src_DV/hyparam/logger.yaml']
+            'dataloader ./SSL_src/dataloader/data_loader.yaml', 
+            'hyparam ./SSL_src/hyparam/test.yaml', 
+            'learner ./SSL_src/hyparam/learner.yaml', 
+            'logger ./SSL_src/hyparam/logger.yaml']
     args=util.util.get_yaml_args(args)    
     
     t=Tester(args)

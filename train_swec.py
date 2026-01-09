@@ -103,9 +103,9 @@ class Learner_config():
     def init_loss_func(self):
 
         # from loss.new_loss import NegArcCos_Loss, SupCon_Loss, Weighted_SupConLoss, NegWeightedArc_Loss, WeightedArc_Loss, NegConstantMargin_Loss
-        from loss.scl_loss import Weighted_SupConLoss
-
-        self.loss_func=Weighted_SupConLoss()
+        #from loss.scl_loss import Weighted_SupConLoss
+        from loss.new_loss import NegWeighted_SupConLoss
+        self.loss_func=NegWeighted_SupConLoss()
         self.loss_train_map_num=self.args['learner']['loss']['option']['train_map_num']     # [0, 1, 2]
         self.loss_weight=self.args['learner']['loss']['option']['each_layer_weight']
 
@@ -206,7 +206,7 @@ class Learner_config():
         self.init_optimizer()
         self.init_optimzer_scheduler()
         self.init_loss_func()
-        self.sigma = [0]
+        self.sigma = [0, 3, 9]
         return self.args
 
 
@@ -336,10 +336,6 @@ class Logger_config():
             }
 
         os.makedirs(os.path.dirname(self.model_save_dir + "last_model.tar"), exist_ok=True)
-        # if self.model_save:
-        #     os.makedirs(os.path.dirname(self.model_save_dir + "best_model.tar"), exist_ok=True)
-        #     torch.save(checkpoint, self.model_save_dir + "best_model.tar")
-        #     print("new best model\n")
         torch.save(checkpoint,  self.model_save_dir + "last_model.tar")
 
         
@@ -430,13 +426,14 @@ class Trainer():
         torch.cuda.empty_cache()
 
 
-        if epoch < 100:
-            self.n_room = 1
-        elif epoch < 200:
-            self.n_room = 8
-        else:
-            self.n_room = 0
+        # if epoch < 100:
+        #     self.n_room = 1
+        # elif epoch < 200:
+        #     self.n_room = 8
+        # else:
+        #     self.n_room = 0
 
+        self.n_room = 1
 
         self.dataloader.train_loader.dataset.random_room_speech_select(self.n_room)
         for iter_num, (mixed, vad, speech_azi, speech_ele, white_snr, coherent_snr, rt60
@@ -475,7 +472,7 @@ class Trainer():
         iter_pos_theta = []
         iter_neg_theta = []
 
-        with torch.no_grad(): #inference시에는 gradient 업데이트가 필요없기에 속도나 메모리측면 이득으로 꺼두기
+        with torch.no_grad(): 
             
             # mixed : (16, 4, 64000)
             # speech_azi : (16, 1)
