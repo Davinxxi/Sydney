@@ -42,7 +42,8 @@ train:
     abs_weights_bound: [0.5, 1.0]
     room_sz_bound: [[3.0, 3.0, 2.5], [10.0, 8.0, 6.0]]
       
-    azi_gap: 30
+    azi_gap: 10
+    # 사람과 사람 사이의 최소한 각도 간격 (icassp 에서는 30 으로 설정했음)
 
     mic:
       rotation: True
