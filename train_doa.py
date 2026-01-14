@@ -771,4 +771,4 @@ if __name__=='__main__':
     
     args=util.util.get_yaml_args(args)
     t=Trainer(args)
-    t.run()
+    t.run() 
